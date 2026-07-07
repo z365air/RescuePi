@@ -7,15 +7,18 @@ let walletKeypair = null;
 let walletPublicKey = null;
 
 const authScreen = document.getElementById('auth-screen');
-const walletLoginScreen = document.getElementById('wallet-login-screen');
+const warningScreen = document.getElementById('warning-screen');
+const walletImportScreen = document.getElementById('wallet-import-screen');
 const mainScreen = document.getElementById('main-screen');
 const authBtn = document.getElementById('auth-btn');
 const authError = document.getElementById('auth-error');
+const understandInput = document.getElementById('understand-input');
+const warningContinueBtn = document.getElementById('warning-continue-btn');
+const warningError = document.getElementById('warning-error');
 const walletMnemonic = document.getElementById('wallet-mnemonic');
 const wordCount = document.getElementById('word-count');
-const understandInput = document.getElementById('understand-input');
-const walletContinueBtn = document.getElementById('wallet-continue-btn');
-const walletLoginError = document.getElementById('wallet-login-error');
+const importContinueBtn = document.getElementById('import-continue-btn');
+const importError = document.getElementById('import-error');
 const logoutBtn = document.getElementById('logout-btn');
 const welcomeMsg = document.getElementById('welcome-msg');
 const walletAddr = document.getElementById('wallet-address');
@@ -33,8 +36,7 @@ const NETWORK_PASSPHRASE = 'Pi Network';
 
 // ─── Fee slider ───
 feeSlider.addEventListener('input', () => {
-  const val = parseInt(feeSlider.value);
-  sendFee.textContent = (0.01 * val).toFixed(2);
+  sendFee.textContent = (0.01 * parseInt(feeSlider.value)).toFixed(2);
 });
 
 // ─── Pi SDK Auth ───
@@ -51,7 +53,7 @@ authBtn.addEventListener('click', async () => {
     currentUser = auth.user;
     localStorage.setItem('rescuepi-user', JSON.stringify(auth));
     authScreen.classList.add('hidden');
-    walletLoginScreen.classList.remove('hidden');
+    warningScreen.classList.remove('hidden');
   } catch (err) {
     authError.textContent = err.message || 'Authentication failed';
     authError.classList.remove('hidden');
@@ -65,6 +67,18 @@ function onIncompletePayment(payment) {
   console.warn('Incomplete payment found:', payment);
 }
 
+// ─── Warning → "I understand" ───
+understandInput.addEventListener('input', () => {
+  warningContinueBtn.disabled = !/^i understand$/i.test(understandInput.value.trim());
+});
+
+warningContinueBtn.addEventListener('click', () => {
+  warningScreen.classList.add('hidden');
+  walletImportScreen.classList.remove('hidden');
+  understandInput.value = '';
+  warningContinueBtn.disabled = true;
+});
+
 // ─── Word counter ───
 walletMnemonic.addEventListener('input', () => {
   const val = walletMnemonic.value.trim();
@@ -73,26 +87,20 @@ walletMnemonic.addEventListener('input', () => {
   wordCount.style.color = words.length === 24 ? 'var(--success)' : 'var(--text-muted)';
 });
 
-// ─── "I understand" validation ───
-understandInput.addEventListener('input', () => {
-  const ok = /^i understand$/i.test(understandInput.value.trim());
-  walletContinueBtn.disabled = !ok;
-});
-
-// ─── Wallet Continue ───
-walletContinueBtn.addEventListener('click', async () => {
-  walletLoginError.classList.add('hidden');
-  walletContinueBtn.disabled = true;
-  walletContinueBtn.textContent = 'Connecting wallet…';
+// ─── Wallet Import ───
+importContinueBtn.addEventListener('click', async () => {
+  importError.classList.add('hidden');
+  importContinueBtn.disabled = true;
+  importContinueBtn.textContent = 'Connecting wallet…';
 
   const mnemonic = walletMnemonic.value.trim();
   const words = mnemonic.split(/\s+/);
 
   if (words.length !== 24) {
-    walletLoginError.textContent = `Expected 24 words, got ${words.length}`;
-    walletLoginError.classList.remove('hidden');
-    walletContinueBtn.disabled = false;
-    walletContinueBtn.textContent = 'Continue';
+    importError.textContent = `Expected 24 words, got ${words.length}`;
+    importError.classList.remove('hidden');
+    importContinueBtn.disabled = false;
+    importContinueBtn.textContent = 'Connect Wallet';
     return;
   }
 
@@ -104,14 +112,14 @@ walletContinueBtn.addEventListener('click', async () => {
     walletKeypair = Keypair.fromRawEd25519Seed(derived.key);
     walletPublicKey = walletKeypair.publicKey();
 
-    walletLoginScreen.classList.add('hidden');
+    walletImportScreen.classList.add('hidden');
     mainScreen.classList.remove('hidden');
     showMainScreen();
   } catch (err) {
-    walletLoginError.textContent = 'Invalid mnemonic. Check your phrase and try again.';
-    walletLoginError.classList.remove('hidden');
-    walletContinueBtn.disabled = false;
-    walletContinueBtn.textContent = 'Continue';
+    importError.textContent = 'Invalid mnemonic. Check your phrase and try again.';
+    importError.classList.remove('hidden');
+    importContinueBtn.disabled = false;
+    importContinueBtn.textContent = 'Connect Wallet';
   }
 });
 
@@ -130,7 +138,6 @@ logoutBtn.addEventListener('click', () => {
   walletPublicKey = null;
   localStorage.removeItem('rescuepi-user');
   walletMnemonic.value = '';
-  understandInput.value = '';
   wordCount.textContent = '0 / 24';
   wordCount.style.color = '';
   sendTo.value = '';
@@ -139,7 +146,6 @@ logoutBtn.addEventListener('click', () => {
   sendFee.textContent = '0.01';
   sendError.classList.add('hidden');
   sendStatus.classList.add('hidden');
-  walletContinueBtn.disabled = true;
   mainScreen.classList.add('hidden');
   authScreen.classList.remove('hidden');
 });
@@ -213,11 +219,9 @@ sendBtn.addEventListener('click', async () => {
       Pi.authenticate(['username', 'wallet_address', 'payments'], onIncompletePayment)
         .then(() => {
           authScreen.classList.add('hidden');
-          walletLoginScreen.classList.remove('hidden');
+          walletImportScreen.classList.remove('hidden');
         })
-        .catch(() => {
-          localStorage.removeItem('rescuepi-user');
-        });
+        .catch(() => localStorage.removeItem('rescuepi-user'));
     } catch {
       localStorage.removeItem('rescuepi-user');
     }
