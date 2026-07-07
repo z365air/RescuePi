@@ -105,10 +105,11 @@ importContinueBtn.addEventListener('click', async () => {
   }
 
   try {
-    const { mnemonicToSeedSync } = await import('bip39');
+    const { mnemonicToSeedSync } = await import('@scure/bip39');
     const { derivePath } = await import('ed25519-hd-key');
+    const { bytesToHex } = await import('@noble/hashes/utils.js');
     const seed = mnemonicToSeedSync(mnemonic);
-    const derived = derivePath("m/44'/314159'/0'", seed.toString('hex'));
+    const derived = derivePath("m/44'/314159'/0'", bytesToHex(seed));
     walletKeypair = Keypair.fromRawEd25519Seed(derived.key);
     walletPublicKey = walletKeypair.publicKey();
 
@@ -116,7 +117,8 @@ importContinueBtn.addEventListener('click', async () => {
     mainScreen.classList.remove('hidden');
     showMainScreen();
   } catch (err) {
-    importError.textContent = 'Invalid mnemonic. Check your phrase and try again.';
+    console.error('Import error:', err);
+    importError.textContent = err.message || 'Invalid mnemonic. Check your phrase and try again.';
     importError.classList.remove('hidden');
     importContinueBtn.disabled = false;
     importContinueBtn.textContent = 'Connect Wallet';

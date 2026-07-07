@@ -10,8 +10,8 @@
     "server": "ts-node scripts/dev.ts"
   },
   "dependencies": {
+    "@scure/bip39": "^2.2.0",
     "@stellar/stellar-sdk": "^16.0.1",
-    "bip39": "^3.1.0",
     "ed25519-hd-key": "^2.0.0"
   },
   "devDependencies": {
