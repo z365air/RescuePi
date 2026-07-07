@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>RescuePi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="screen">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <h1 class="auth-title">RescuePi</h1>
+        <p class="auth-subtitle">Pi Network Asset Recovery</p>
+        <button id="auth-btn" class="btn-primary btn-large">Sign in with Pi</button>
+        <p id="auth-error" class="error hidden"></p>
+      </div>
+    </div>
+
+    <!-- Main Screen -->
+    <div id="main-screen" class="screen hidden">
+      <header class="topbar">
+        <div class="topbar-left">
+          <span class="topbar-logo">RescuePi</span>
+        </div>
+        <div class="topbar-right">
+          <span id="user-name" class="user-name"></span>
+          <button id="logout-btn" class="btn-ghost btn-sm">Sign out</button>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <div class="welcome-card">
+          <h2 id="welcome-msg">Welcome</h2>
+          <p id="wallet-address" class="wallet-addr"></p>
+        </div>
+
+        <div class="form-card">
+          <div class="form-group">
+            <label class="form-label">Send To</label>
+            <input type="text" id="send-to" placeholder="G... wallet address" class="form-input mono">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Amount (PI)</label>
+            <input type="text" id="send-amount" placeholder="0.0" class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Fee: <span id="fee-display">0.01</span> PI</label>
+            <div class="slider-row">
+              <span class="slider-label">1x</span>
+              <input type="range" id="fee-slider" min="1" max="100" value="1" step="1" class="form-slider">
+              <span class="slider-label">100x</span>
+            </div>
+            <p class="form-hint">Multiplier × 0.01 PI base fee</p>
+          </div>
+
+          <button id="send-btn" class="btn-primary btn-large" disabled>Send</button>
+          <p id="send-error" class="error hidden"></p>
+          <p id="send-status" class="status-msg hidden"></p>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="https://sdk.minepi.com/pi-sdk.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

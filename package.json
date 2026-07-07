@@ -1,0 +1,20 @@
+{
+  "name": "rescuepi",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "ts-node scripts/dev.ts",
+    "start": "node dist/scripts/dev.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.5"
+  }
+}
