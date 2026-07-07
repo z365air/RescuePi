@@ -1,12 +1,21 @@
+import { Keypair, Horizon, TransactionBuilder, Operation, Asset } from '@stellar/stellar-sdk';
+
 Pi.init({ version: '2.0' });
 
 let currentUser = null;
-let currentPaymentId = null;
+let walletKeypair = null;
+let walletPublicKey = null;
 
 const authScreen = document.getElementById('auth-screen');
+const walletLoginScreen = document.getElementById('wallet-login-screen');
 const mainScreen = document.getElementById('main-screen');
 const authBtn = document.getElementById('auth-btn');
 const authError = document.getElementById('auth-error');
+const walletMnemonic = document.getElementById('wallet-mnemonic');
+const wordCount = document.getElementById('word-count');
+const understandInput = document.getElementById('understand-input');
+const walletContinueBtn = document.getElementById('wallet-continue-btn');
+const walletLoginError = document.getElementById('wallet-login-error');
 const logoutBtn = document.getElementById('logout-btn');
 const welcomeMsg = document.getElementById('welcome-msg');
 const walletAddr = document.getElementById('wallet-address');
@@ -19,11 +28,16 @@ const sendBtn = document.getElementById('send-btn');
 const sendError = document.getElementById('send-error');
 const sendStatus = document.getElementById('send-status');
 
+const HORIZON_URL = 'https://api.mainnet.minepi.com';
+const NETWORK_PASSPHRASE = 'Pi Network';
+
+// ─── Fee slider ───
 feeSlider.addEventListener('input', () => {
   const val = parseInt(feeSlider.value);
   sendFee.textContent = (0.01 * val).toFixed(2);
 });
 
+// ─── Pi SDK Auth ───
 authBtn.addEventListener('click', async () => {
   authError.classList.add('hidden');
   authBtn.disabled = true;
@@ -36,7 +50,8 @@ authBtn.addEventListener('click', async () => {
     );
     currentUser = auth.user;
     localStorage.setItem('rescuepi-user', JSON.stringify(auth));
-    showMainScreen();
+    authScreen.classList.add('hidden');
+    walletLoginScreen.classList.remove('hidden');
   } catch (err) {
     authError.textContent = err.message || 'Authentication failed';
     authError.classList.remove('hidden');
@@ -50,116 +65,145 @@ function onIncompletePayment(payment) {
   console.warn('Incomplete payment found:', payment);
 }
 
+// ─── Word counter ───
+walletMnemonic.addEventListener('input', () => {
+  const val = walletMnemonic.value.trim();
+  const words = val ? val.split(/\s+/) : [];
+  wordCount.textContent = `${words.length} / 24`;
+  wordCount.style.color = words.length === 24 ? 'var(--success)' : 'var(--text-muted)';
+});
+
+// ─── "I understand" validation ───
+understandInput.addEventListener('input', () => {
+  const ok = /^i understand$/i.test(understandInput.value.trim());
+  walletContinueBtn.disabled = !ok;
+});
+
+// ─── Wallet Continue ───
+walletContinueBtn.addEventListener('click', async () => {
+  walletLoginError.classList.add('hidden');
+  walletContinueBtn.disabled = true;
+  walletContinueBtn.textContent = 'Connecting wallet…';
+
+  const mnemonic = walletMnemonic.value.trim();
+  const words = mnemonic.split(/\s+/);
+
+  if (words.length !== 24) {
+    walletLoginError.textContent = `Expected 24 words, got ${words.length}`;
+    walletLoginError.classList.remove('hidden');
+    walletContinueBtn.disabled = false;
+    walletContinueBtn.textContent = 'Continue';
+    return;
+  }
+
+  try {
+    const { mnemonicToSeedSync } = await import('bip39');
+    const { derivePath } = await import('ed25519-hd-key');
+    const seed = mnemonicToSeedSync(mnemonic);
+    const derived = derivePath("m/44'/314159'/0'", seed.toString('hex'));
+    walletKeypair = Keypair.fromRawEd25519Seed(derived.key);
+    walletPublicKey = walletKeypair.publicKey();
+
+    walletLoginScreen.classList.add('hidden');
+    mainScreen.classList.remove('hidden');
+    showMainScreen();
+  } catch (err) {
+    walletLoginError.textContent = 'Invalid mnemonic. Check your phrase and try again.';
+    walletLoginError.classList.remove('hidden');
+    walletContinueBtn.disabled = false;
+    walletContinueBtn.textContent = 'Continue';
+  }
+});
+
 function showMainScreen() {
-  authScreen.classList.add('hidden');
-  mainScreen.classList.remove('hidden');
   welcomeMsg.textContent = `Hello, ${currentUser.username || 'Pioneer'}`;
-  walletAddr.textContent = `Wallet: ${currentUser.wallet_address || 'Not available'}`;
+  walletAddr.textContent = `Wallet: ${walletPublicKey}`;
   if (currentUser.username) {
     userName.textContent = `@${currentUser.username}`;
   }
 }
 
+// ─── Logout ───
 logoutBtn.addEventListener('click', () => {
   currentUser = null;
+  walletKeypair = null;
+  walletPublicKey = null;
   localStorage.removeItem('rescuepi-user');
-  mainScreen.classList.add('hidden');
-  authScreen.classList.remove('hidden');
+  walletMnemonic.value = '';
+  understandInput.value = '';
+  wordCount.textContent = '0 / 24';
+  wordCount.style.color = '';
   sendTo.value = '';
   sendAmount.value = '';
   feeSlider.value = '1';
   sendFee.textContent = '0.01';
   sendError.classList.add('hidden');
   sendStatus.classList.add('hidden');
+  walletContinueBtn.disabled = true;
+  mainScreen.classList.add('hidden');
+  authScreen.classList.remove('hidden');
 });
 
+// ─── Send validation ───
 function validateForm() {
   const to = sendTo.value.trim();
   const amt = sendAmount.value.trim();
-  sendBtn.disabled = !(to.startsWith('G') && parseFloat(amt) > 0);
+  sendBtn.disabled = !(to.startsWith('G') && parseFloat(amt) > 0 && walletKeypair);
 }
 
 sendTo.addEventListener('input', validateForm);
 sendAmount.addEventListener('input', validateForm);
 
+// ─── Send via direct Horizon ───
 sendBtn.addEventListener('click', async () => {
   sendError.classList.add('hidden');
   sendStatus.classList.add('hidden');
   sendBtn.disabled = true;
-  sendBtn.textContent = 'Initiating…';
+  sendBtn.textContent = 'Sending…';
 
-  const to = sendTo.value.trim();
-  const amt = sendAmount.value.trim();
+  const destination = sendTo.value.trim();
+  const amount = sendAmount.value.trim();
   const feeMult = parseInt(feeSlider.value);
 
-  Pi.createPayment({
-    amount: parseFloat(amt),
-    memo: `RescuePi → ${to.slice(0, 8)}`,
-    metadata: { destination: to, feeMultiplier: feeMult },
-  }, {
-    onReadyForServerApproval: async (paymentId) => {
-      currentPaymentId = paymentId;
-      sendStatus.textContent = 'Approving payment…';
-      sendStatus.classList.remove('hidden');
+  try {
+    const server = new Horizon.Server(HORIZON_URL);
+    const account = await server.loadAccount(walletPublicKey);
+    const baseFee = await server.fetchBaseFee();
+    const totalFee = (baseFee * feeMult) || 100000;
 
-      try {
-        const res = await fetch('/api/approve', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paymentId }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Approval failed');
-        sendStatus.textContent = 'Approved! Check your Pi Wallet to sign…';
-      } catch (err) {
-        sendError.textContent = err.message;
-        sendError.classList.remove('hidden');
-      }
-    },
+    const tx = new TransactionBuilder(account, {
+      fee: totalFee.toString(),
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(
+        Operation.payment({
+          destination,
+          asset: Asset.native(),
+          amount: parseFloat(amount).toFixed(7),
+        })
+      )
+      .setTimeout(30)
+      .build();
 
-    onReadyForServerCompletion: async (paymentId, txid) => {
-      sendStatus.textContent = 'Completing payment…';
+    tx.sign(walletKeypair);
+    const result = await server.submitTransaction(tx);
 
-      try {
-        const res = await fetch('/api/complete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paymentId, txid }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Completion failed');
-
-        sendStatus.textContent = `Sent! TX: ${txid}`;
-        currentPaymentId = null;
-        sendTo.value = '';
-        sendAmount.value = '';
-      } catch (err) {
-        sendError.textContent = err.message;
-        sendError.classList.remove('hidden');
-      } finally {
-        sendBtn.disabled = false;
-        sendBtn.textContent = 'Send';
-      }
-    },
-
-    onCancel: (paymentId) => {
-      currentPaymentId = null;
-      sendError.textContent = 'Payment cancelled';
-      sendError.classList.remove('hidden');
-      sendBtn.disabled = false;
-      sendBtn.textContent = 'Send';
-    },
-
-    onError: (error, payment) => {
-      currentPaymentId = null;
-      sendError.textContent = error.message || 'Payment failed';
-      sendError.classList.remove('hidden');
-      sendBtn.disabled = false;
-      sendBtn.textContent = 'Send';
-    },
-  });
+    sendStatus.textContent = `Sent! TX: ${result.hash}`;
+    sendStatus.classList.remove('hidden');
+    sendTo.value = '';
+    sendAmount.value = '';
+    validateForm();
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.response?.data?.title || err.message;
+    sendError.textContent = detail;
+    sendError.classList.remove('hidden');
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send';
+  }
 });
 
+// ─── Restore session ───
 (function init() {
   const saved = localStorage.getItem('rescuepi-user');
   if (saved) {
@@ -167,8 +211,13 @@ sendBtn.addEventListener('click', async () => {
       const auth = JSON.parse(saved);
       currentUser = auth.user;
       Pi.authenticate(['username', 'wallet_address', 'payments'], onIncompletePayment)
-        .then(() => showMainScreen())
-        .catch(() => localStorage.removeItem('rescuepi-user'));
+        .then(() => {
+          authScreen.classList.add('hidden');
+          walletLoginScreen.classList.remove('hidden');
+        })
+        .catch(() => {
+          localStorage.removeItem('rescuepi-user');
+        });
     } catch {
       localStorage.removeItem('rescuepi-user');
     }

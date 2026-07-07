@@ -23,6 +23,51 @@
       </div>
     </div>
 
+    <!-- Wallet Login Screen (after oAuth) -->
+    <div id="wallet-login-screen" class="screen hidden">
+      <div class="wallet-login-scroll">
+        <div class="wallet-login-card">
+          <div class="notice-box">
+            <div class="notice-title">Before You Proceed</div>
+            <p class="notice-text">
+              Pi Core Team does not allow developers to ask for user mnemonics or secret keys for user safety.
+              Although this app is safe to use, if you want to abide by these restrictions and be certain of the
+              safety of your funds, <strong>do not use this app and close this screen now</strong>.
+            </p>
+            <p class="notice-text">
+              Pi Network is a Stellar fork and this app lets you connect to your wallet through Horizon, the
+              native Stellar blockchain interface. This allows you to perform operations that are not available
+              on the official Pi Wallet, such as sweeping, collecting, sending, scheduling, and more. Note that
+              any wallet you use on Pi Mainnet must still be KYC verified.
+            </p>
+            <p class="notice-text">
+              RescuePi is designed for users who have lost discretion of their wallet keys and are at risk of
+              attackers. You have a chance to recover your future unlocks with this tool. Our bet is to be
+              faster and more precise than the attackers.
+            </p>
+            <p class="notice-text">
+              If you understand the risks and the possibilities of using this app, type
+              <strong>"I understand"</strong> into the box below and click Continue.
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Wallet Mnemonic (24 words)</label>
+            <textarea id="wallet-mnemonic" rows="3" placeholder="Enter your 24-word mnemonic phrase" class="form-input mono" style="resize:none;"></textarea>
+            <div class="word-count" id="word-count">0 / 24</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Confirmation</label>
+            <input type="text" id="understand-input" placeholder='Type "I understand"' class="form-input">
+          </div>
+
+          <button id="wallet-continue-btn" class="btn-primary btn-large" disabled>Continue</button>
+          <p id="wallet-login-error" class="error hidden"></p>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Screen -->
     <div id="main-screen" class="screen hidden">
       <header class="topbar">

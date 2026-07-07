@@ -9,11 +9,15 @@
     "preview": "vite preview",
     "server": "ts-node scripts/dev.ts"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@stellar/stellar-sdk": "^16.0.1",
+    "bip39": "^3.1.0",
+    "ed25519-hd-key": "^2.0.0"
+  },
   "devDependencies": {
-    "vite": "^6.0.0",
+    "@types/node": "^20.11.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
-    "@types/node": "^20.11.5"
+    "vite": "^6.0.0"
   }
 }
