@@ -132,9 +132,9 @@ function showMainScreen() {
   accountDetailsDiv.classList.add('hidden');
   accountDetailsBtn.disabled = false;
   accountDetailsBtn.textContent = 'Load Account Details';
-  createAccountResult.classList.add('hidden');
-  createAccountBtn.disabled = false;
-  createAccountBtn.textContent = 'Create Account';
+  prefundResult.classList.add('hidden');
+  prefundBtn.disabled = false;
+  prefundBtn.textContent = 'Pre-Fund Account';
 }
 
 // ─── Logout ───
@@ -172,8 +172,7 @@ const rescueStatus = document.getElementById('rescue-status');
 const rescueError = document.getElementById('rescue-error');
 const accountDetailsBtn = document.getElementById('account-details-btn');
 const accountDetailsDiv = document.getElementById('account-details');
-const createAccountBtn = document.getElementById('create-account-btn');
-const createAccountResult = document.getElementById('create-account-result');
+
 
 let schedules = [];
 let rescueActive = false;
@@ -469,22 +468,83 @@ accountDetailsBtn.addEventListener('click', async () => {
   }
 });
 
-// ─── Create Account ───
-createAccountBtn.addEventListener('click', async () => {
-  createAccountBtn.disabled = true;
-  createAccountBtn.textContent = 'Creating…';
-  createAccountResult.classList.add('hidden');
+// ─── Pre-Fund Account ───
+const prefundBtn = document.getElementById('prefund-btn');
+const prefundResult = document.getElementById('prefund-result');
+const cbAmount = document.getElementById('cb-amount');
 
+prefundBtn.addEventListener('click', async () => {
+  prefundBtn.disabled = true;
+  prefundBtn.textContent = 'Processing…';
+  prefundResult.classList.add('hidden');
+
+  const newPair = Keypair.random();
+  const newPublic = newPair.publicKey();
+  const newSecret = newPair.secret();
+  const amount = cbAmount.value.trim() || '1.0000000';
+
+  let cbHash = null;
+  let cbError = null;
+  let caError = null;
+
+  // Step 1: always show generated keypair
+  let html = `<div class="ad-section">
+    <div class="ad-section-title">Generated Keypair</div>
+    <div class="ad-row"><span class="ad-label">Public Key</span><span class="ad-mono">${newPublic}</span></div>
+    <div class="ad-row"><span class="ad-label">Secret Key</span><span class="ad-mono" style="font-size:11px;color:var(--text-muted);">${newSecret}</span></div>
+  </div>`;
+
+  const server = new Horizon.Server(HORIZON_URL);
+
+  // Step 2: create claimable balance
   try {
-    const server = new Horizon.Server(HORIZON_URL);
-    const account = await server.loadAccount(walletPublicKey);
+    const funder = await server.loadAccount(walletPublicKey);
     const baseFee = await server.fetchBaseFee();
 
-    const newPair = Keypair.random();
-    const newPublic = newPair.publicKey();
-    const newSecret = newPair.secret();
+    const cbTx = new TransactionBuilder(funder, {
+      fee: (baseFee * 10).toString(),
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(
+        Operation.createClaimableBalance({
+          asset: Asset.native(),
+          amount: parseFloat(amount).toFixed(7),
+          claimants: [
+            {
+              destination: newPublic,
+              predicate: { unconditional: true },
+            },
+          ],
+        })
+      )
+      .setTimeout(30)
+      .build();
 
-    const tx = new TransactionBuilder(account, {
+    cbTx.sign(walletKeypair);
+    const cbResult = await server.submitTransaction(cbTx);
+    cbHash = cbResult.hash;
+
+    html += `<div class="ad-section">
+      <div class="ad-section-title">Claimable Balance</div>
+      <div class="ad-row" style="color:var(--success);"><span class="ad-label">Status</span><span>Created</span></div>
+      <div class="ad-row"><span class="ad-label">Amount</span><span class="ad-mono">${parseFloat(amount).toFixed(7)} PI</span></div>
+      <div class="ad-row"><span class="ad-label">TX Hash</span><span class="ad-mono" style="font-size:11px;">${cbHash}</span></div>
+    </div>`;
+  } catch (err) {
+    cbError = err.response?.data?.detail || err.response?.data?.title || err.message;
+    html += `<div class="ad-section">
+      <div class="ad-section-title">Claimable Balance</div>
+      <div class="ad-row" style="color:var(--danger);"><span class="ad-label">Status</span><span>Failed</span></div>
+      <div class="ad-row"><span class="ad-label">Error</span><span style="font-size:12px;color:var(--danger);">${cbError}</span></div>
+    </div>`;
+  }
+
+  // Step 3: try create_account
+  try {
+    const funder = await server.loadAccount(walletPublicKey);
+    const baseFee = await server.fetchBaseFee();
+
+    const caTx = new TransactionBuilder(funder, {
       fee: (baseFee * 10).toString(),
       networkPassphrase: NETWORK_PASSPHRASE,
     })
@@ -497,36 +557,33 @@ createAccountBtn.addEventListener('click', async () => {
       .setTimeout(30)
       .build();
 
-    tx.sign(walletKeypair);
-    const result = await server.submitTransaction(tx);
+    caTx.sign(walletKeypair);
+    const caResult = await server.submitTransaction(caTx);
 
-    let html = '<div class="ad-section">';
-    html += `<div class="ad-row" style="color:var(--success);"><span class="ad-label">Status</span><span>Success</span></div>`;
-    html += `<div class="ad-row"><span class="ad-label">New Account</span><span class="ad-mono">${newPublic}</span></div>`;
-    html += `<div class="ad-row"><span class="ad-label">Secret Key</span><span class="ad-mono" style="font-size:11px;color:var(--text-muted);">${newSecret}</span></div>`;
-    html += `<div class="ad-row"><span class="ad-label">Funding</span><span class="ad-mono">1.0000000 PI</span></div>`;
-    html += `<div class="ad-row"><span class="ad-label">TX Hash</span><span class="ad-mono" style="font-size:11px;">${result.hash}</span></div>`;
-    html += `<div class="ad-row"><span class="ad-label">Type</span><span>create_account (type_i: 0)</span></div>`;
-    html += '</div>';
-    html += '<p style="font-size:12px;color:var(--text-muted);margin-top:8px;text-align:center;">Account creation succeeded! Pi Network allows it.</p>';
-
-    createAccountResult.innerHTML = html;
-    createAccountResult.classList.remove('hidden');
+    html += `<div class="ad-section">
+      <div class="ad-section-title">Create Account</div>
+      <div class="ad-row" style="color:var(--success);"><span class="ad-label">Status</span><span>Success</span></div>
+      <div class="ad-row"><span class="ad-label">TX Hash</span><span class="ad-mono" style="font-size:11px;">${caResult.hash}</span></div>
+    </div>`;
   } catch (err) {
-    const detail = err.response?.data?.detail || err.response?.data?.title || err.message;
-    let html = '<div class="ad-section">';
-    html += `<div class="ad-row" style="color:var(--danger);"><span class="ad-label">Status</span><span>Failed</span></div>`;
-    html += `<div class="ad-row"><span class="ad-label">Error</span><span style="font-size:12px;color:var(--danger);">${detail}</span></div>`;
-    html += `<div class="ad-row"><span class="ad-label">Type</span><span>create_account (type_i: 0)</span></div>`;
-    html += '</div>';
-    html += '<p style="font-size:12px;color:var(--text-muted);margin-top:8px;text-align:center;">Account creation blocked on Pi mainnet.</p>';
-
-    createAccountResult.innerHTML = html;
-    createAccountResult.classList.remove('hidden');
-  } finally {
-    createAccountBtn.disabled = false;
-    createAccountBtn.textContent = 'Create Account';
+    caError = err.response?.data?.detail || err.response?.data?.title || err.message;
+    html += `<div class="ad-section">
+      <div class="ad-section-title">Create Account</div>
+      <div class="ad-row" style="color:var(--danger);"><span class="ad-label">Status</span><span>Blocked</span></div>
+      <div class="ad-row"><span class="ad-label">Error</span><span style="font-size:12px;color:var(--danger);">${caError}</span></div>
+    </div>`;
   }
+
+  if (!cbError && caError) {
+    html += '<p style="font-size:12px;color:var(--text-muted);margin-top:8px;text-align:center;">Claimable balance created. Funds will be claimable once Pi Team creates the account.</p>';
+  } else if (!cbError && !caError) {
+    html += '<p style="font-size:12px;color:var(--success);margin-top:8px;text-align:center;">Account created and funded!</p>';
+  }
+
+  prefundResult.innerHTML = html;
+  prefundResult.classList.remove('hidden');
+  prefundBtn.disabled = false;
+  prefundBtn.textContent = 'Pre-Fund Account';
 });
 
 // ─── Restore session ───

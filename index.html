@@ -143,11 +143,17 @@
         <div class="form-card">
           <h3 class="card-title">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-            Create Account
+            Pre-Fund Account
           </h3>
-          <p class="card-desc">Attempt to create a new Pi Network account from your wallet. (1 PI starting balance, type_i: 0)</p>
-          <button id="create-account-btn" class="btn-primary btn-large">Create Account</button>
-          <div id="create-account-result" class="account-details hidden"></div>
+          <p class="card-desc">Generate a new keypair, pre-fund via claimable balance, then attempt create_account.</p>
+
+          <div class="form-group">
+            <label class="form-label">Claimable Balance Amount (PI)</label>
+            <input type="text" id="cb-amount" value="1.0000000" class="form-input mono">
+          </div>
+
+          <button id="prefund-btn" class="btn-primary btn-large">Pre-Fund Account</button>
+          <div id="prefund-result" class="account-details hidden"></div>
         </div>
       </main>
     </div>
