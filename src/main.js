@@ -23,21 +23,8 @@ const logoutBtn = document.getElementById('logout-btn');
 const welcomeMsg = document.getElementById('welcome-msg');
 const walletAddr = document.getElementById('wallet-address');
 const userName = document.getElementById('user-name');
-const sendTo = document.getElementById('send-to');
-const sendAmount = document.getElementById('send-amount');
-const sendFee = document.getElementById('fee-display');
-const feeSlider = document.getElementById('fee-slider');
-const sendBtn = document.getElementById('send-btn');
-const sendError = document.getElementById('send-error');
-const sendStatus = document.getElementById('send-status');
-
 const HORIZON_URL = 'https://api.mainnet.minepi.com';
 const NETWORK_PASSPHRASE = 'Pi Network';
-
-// ─── Fee slider ───
-feeSlider.addEventListener('input', () => {
-  sendFee.textContent = (0.01 * parseInt(feeSlider.value)).toFixed(2);
-});
 
 // ─── Pi SDK Auth ───
 authBtn.addEventListener('click', async () => {
@@ -142,6 +129,9 @@ function showMainScreen() {
     rescueTimer = null;
   }
   rescueActive = false;
+  accountDetailsDiv.classList.add('hidden');
+  accountDetailsBtn.disabled = false;
+  accountDetailsBtn.textContent = 'Load Account Details';
 }
 
 // ─── Logout ───
@@ -154,74 +144,14 @@ logoutBtn.addEventListener('click', () => {
   walletMnemonic.value = '';
   wordCount.textContent = '0 / 24';
   wordCount.style.color = '';
-  sendTo.value = '';
-  sendAmount.value = '';
-  feeSlider.value = '1';
-  sendFee.textContent = '0.01';
-  sendError.classList.add('hidden');
-  sendStatus.classList.add('hidden');
   mainScreen.classList.add('hidden');
   authScreen.classList.remove('hidden');
 });
 
-// ─── Send validation ───
-function validateForm() {
-  const to = sendTo.value.trim();
-  const amt = sendAmount.value.trim();
-  sendBtn.disabled = !(to.startsWith('G') && parseFloat(amt) > 0 && walletKeypair);
+function shortenAddr(addr) {
+  if (!addr || addr.length < 12) return addr;
+  return addr.slice(0, 5) + '...' + addr.slice(-5);
 }
-
-sendTo.addEventListener('input', validateForm);
-sendAmount.addEventListener('input', validateForm);
-
-// ─── Send via direct Horizon ───
-sendBtn.addEventListener('click', async () => {
-  sendError.classList.add('hidden');
-  sendStatus.classList.add('hidden');
-  sendBtn.disabled = true;
-  sendBtn.textContent = 'Sending…';
-
-  const destination = sendTo.value.trim();
-  const amount = sendAmount.value.trim();
-  const feeMult = parseInt(feeSlider.value);
-
-  try {
-    const server = new Horizon.Server(HORIZON_URL);
-    const account = await server.loadAccount(walletPublicKey);
-    const baseFee = await server.fetchBaseFee();
-    const totalFee = (baseFee * feeMult) || 100000;
-
-    const tx = new TransactionBuilder(account, {
-      fee: totalFee.toString(),
-      networkPassphrase: NETWORK_PASSPHRASE,
-    })
-      .addOperation(
-        Operation.payment({
-          destination,
-          asset: Asset.native(),
-          amount: parseFloat(amount).toFixed(7),
-        })
-      )
-      .setTimeout(30)
-      .build();
-
-    tx.sign(walletKeypair);
-    const result = await server.submitTransaction(tx);
-
-    sendStatus.textContent = `Sent! TX: ${result.hash}`;
-    sendStatus.classList.remove('hidden');
-    sendTo.value = '';
-    sendAmount.value = '';
-    validateForm();
-  } catch (err) {
-    const detail = err.response?.data?.detail || err.response?.data?.title || err.message;
-    sendError.textContent = detail;
-    sendError.classList.remove('hidden');
-  } finally {
-    sendBtn.disabled = false;
-    sendBtn.textContent = 'Send';
-  }
-});
 
 // ─── Rescue Mode ───
 const RESCUE_DESTINATIONS = [
@@ -237,6 +167,8 @@ const rescueActivateBtn = document.getElementById('rescue-activate-btn');
 const rescueDeactivateBtn = document.getElementById('rescue-deactivate-btn');
 const rescueStatus = document.getElementById('rescue-status');
 const rescueError = document.getElementById('rescue-error');
+const accountDetailsBtn = document.getElementById('account-details-btn');
+const accountDetailsDiv = document.getElementById('account-details');
 
 let schedules = [];
 let rescueActive = false;
@@ -252,7 +184,7 @@ setMinDatetime();
 
 function renderDestinations() {
   rescueDestinations.innerHTML = RESCUE_DESTINATIONS.map(addr =>
-    `<div class="addr-item"><span class="addr-label">Destination</span>${addr}</div>`
+    `<div class="addr-item"><span class="addr-label">Destination</span>${shortenAddr(addr)}</div>`
   ).join('');
 }
 
@@ -432,6 +364,105 @@ function deactivateRescue() {
 
 rescueActivateBtn.addEventListener('click', activateRescue);
 rescueDeactivateBtn.addEventListener('click', deactivateRescue);
+
+// ─── Account Details ───
+accountDetailsBtn.addEventListener('click', async () => {
+  accountDetailsBtn.disabled = true;
+  accountDetailsBtn.textContent = 'Loading…';
+  accountDetailsDiv.classList.add('hidden');
+
+  try {
+    const server = new Horizon.Server(HORIZON_URL);
+    const account = await server.loadAccount(walletPublicKey);
+    const allOps = await server.operations()
+      .forAccount(walletPublicKey)
+      .limit(200)
+      .order('asc')
+      .call();
+
+    const firstOp = allOps.records[0];
+    const accCreationTime = firstOp?.created_at || 'N/A';
+
+    const lastOps = await server.operations()
+      .forAccount(walletPublicKey)
+      .limit(1)
+      .order('desc')
+      .call();
+    const lastOpTime = lastOps.records[0]?.created_at || 'N/A';
+
+    const claimBalOps = allOps.records.filter(r => r.type === 'create_claimable_balance');
+    const claimedIds = new Set(
+      allOps.records.filter(r => r.type === 'claim_claimable_balance').map(r => r.balance_id)
+    );
+
+    let lockups = [];
+    for (const op of claimBalOps) {
+      const forUser = op.claimants?.find(c => c.destination === walletPublicKey);
+      if (!forUser) continue;
+      const relBefore = parseInt(forUser.predicate?.rel_before || forUser.predicate?.not?.rel_before || '0');
+      const unlockTime = new Date(new Date(op.created_at).getTime() + relBefore * 1000);
+      const balanceId = op.id;
+      lockups.push({
+        id: balanceId,
+        amount: op.amount,
+        createdAt: op.created_at,
+        unlockTime,
+        claimed: claimedIds.has(op.balance_id),
+      });
+    }
+
+    const nativeBalance = account.balances.find(b => b.asset_type === 'native');
+    const availableBalance = nativeBalance ? parseFloat(nativeBalance.balance) : 0;
+    const lockedTotal = lockups.filter(l => !l.claimed).reduce((s, l) => s + parseFloat(l.amount), 0);
+
+    let html = '<div class="ad-section">';
+    html += `<div class="ad-row"><span class="ad-label">Account</span><span class="ad-mono">${shortenAddr(walletPublicKey)}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Sequence</span><span class="ad-mono">${account.sequence}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Created</span><span>${new Date(accCreationTime).toLocaleString()}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Last Operation</span><span>${new Date(lastOpTime).toLocaleString()}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Subentries</span><span>${account.subentry_count}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Signers</span><span>${account.signers.length}</span></div>`;
+    html += '</div>';
+
+    html += '<div class="ad-section"><div class="ad-section-title">Balances</div>';
+    html += `<div class="ad-row"><span class="ad-label">Available</span><span class="ad-mono">${availableBalance.toFixed(7)} PI</span></div>`;
+    if (lockedTotal > 0) {
+      html += `<div class="ad-row" style="color:var(--danger);"><span class="ad-label">Locked (on-chain)</span><span class="ad-mono">${lockedTotal.toFixed(7)} PI</span></div>`;
+    }
+    html += '</div>';
+
+    if (lockups.length > 0) {
+      html += '<div class="ad-section"><div class="ad-section-title">Lockups / Unlock Schedule</div>';
+      for (const l of lockups) {
+        const status = l.claimed
+          ? '<span style="color:var(--success);">Claimed</span>'
+          : `<span style="color:var(--danger);">Locked until ${l.unlockTime.toLocaleString()}</span>`;
+        html += `<div class="ad-row ad-row-col">
+          <div><span class="ad-label">${l.claimed ? 'Claimed' : 'Locked'}</span><span class="ad-mono">${parseFloat(l.amount).toFixed(7)} PI</span></div>
+          <div style="font-size:12px;color:var(--text-muted);">${status}</div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    html += '<div class="ad-section"><div class="ad-section-title">Flags</div>';
+    const flags = account.flags;
+    html += `<div class="ad-row"><span class="ad-label">Auth Required</span><span>${flags.auth_required ? 'Yes' : 'No'}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Auth Revocable</span><span>${flags.auth_revocable ? 'Yes' : 'No'}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Auth Immutable</span><span>${flags.auth_immutable ? 'Yes' : 'No'}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Auth Clawback</span><span>${flags.auth_clawback_enabled ? 'Yes' : 'No'}</span></div>`;
+    html += '</div>';
+
+    accountDetailsDiv.innerHTML = html;
+    accountDetailsDiv.classList.remove('hidden');
+  } catch (err) {
+    accountDetailsDiv.innerHTML = `<div class="error" style="margin:0;">${err.message || 'Failed to load account details'}</div>`;
+    accountDetailsDiv.classList.remove('hidden');
+  } finally {
+    accountDetailsBtn.disabled = false;
+    accountDetailsBtn.textContent = 'Load Account Details';
+  }
+});
 
 // ─── Restore session ───
 (function init() {
