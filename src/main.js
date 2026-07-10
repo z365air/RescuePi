@@ -1,4 +1,4 @@
-import { Keypair, Horizon, TransactionBuilder, Operation, Asset } from '@stellar/stellar-sdk';
+import { Keypair, Horizon, TransactionBuilder, Operation, Asset, Claimant } from '@stellar/stellar-sdk';
 
 Pi.init({ version: '2.0' });
 
@@ -510,10 +510,7 @@ prefundBtn.addEventListener('click', async () => {
           asset: Asset.native(),
           amount: parseFloat(amount).toFixed(7),
           claimants: [
-            {
-              destination: newPublic,
-              predicate: { unconditional: true },
-            },
+            new Claimant(newPublic, Claimant.predicateUnconditional()),
           ],
         })
       )
