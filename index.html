@@ -121,6 +121,36 @@
           <p id="send-error" class="error hidden"></p>
           <p id="send-status" class="status-msg hidden"></p>
         </div>
+
+        <div class="form-card">
+          <h3 class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Rescue Mode
+          </h3>
+          <p class="card-desc">Balance is swept on schedule to the hardcoded rescue addresses below.</p>
+
+          <div class="form-group">
+            <label class="form-label">Rescue Addresses</label>
+            <div id="rescue-destinations" class="addr-list"></div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Schedule Sweep</label>
+            <div class="schedule-row">
+              <input type="datetime-local" id="schedule-datetime" class="form-input">
+              <button id="schedule-add-btn" class="btn-primary btn-sm" disabled>Add</button>
+            </div>
+          </div>
+
+          <div id="schedule-list" class="schedule-list"></div>
+
+          <div class="rescue-actions">
+            <button id="rescue-activate-btn" class="btn-primary btn-large">Activate Rescue Mode</button>
+            <button id="rescue-deactivate-btn" class="btn-ghost btn-large hidden">Deactivate</button>
+          </div>
+          <p id="rescue-status" class="status-msg hidden"></p>
+          <p id="rescue-error" class="error hidden"></p>
+        </div>
       </main>
     </div>
   </div>

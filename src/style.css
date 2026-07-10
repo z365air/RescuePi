@@ -346,6 +346,158 @@ html, body {
   text-align: right;
 }
 
+/* ─── Rescue Mode ─── */
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.card-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.addr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.addr-item {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.addr-item .addr-label {
+  display: block;
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.schedule-row {
+  display: flex;
+  gap: 8px;
+}
+
+.schedule-row .form-input {
+  flex: 1;
+}
+
+.schedule-list {
+  margin-bottom: 16px;
+}
+
+.sched-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+
+.sched-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.sched-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.sched-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.sched-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.sched-badge.scheduled { background: rgba(99,102,241,0.15); color: #818cf8; }
+.sched-badge.queued    { background: rgba(234,179,8,0.15);  color: #fbbf24; }
+.sched-badge.executing { background: rgba(99,102,241,0.15); color: #818cf8; animation: pulse 1s infinite; }
+.sched-badge.executed  { background: rgba(34,197,94,0.15);  color: var(--success); }
+.sched-badge.failed    { background: rgba(239,68,68,0.15);  color: var(--danger); }
+
+.sched-error {
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 2px;
+}
+
+.sched-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.sched-remove:hover {
+  color: var(--danger);
+}
+
+.rescue-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rescue-active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 12px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(34,197,94,0.1);
+  color: var(--success);
+}
+
+.rescue-active-badge .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* ─── Scrollbar ─── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
