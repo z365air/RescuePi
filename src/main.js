@@ -132,6 +132,9 @@ function showMainScreen() {
   accountDetailsDiv.classList.add('hidden');
   accountDetailsBtn.disabled = false;
   accountDetailsBtn.textContent = 'Load Account Details';
+  createAccountResult.classList.add('hidden');
+  createAccountBtn.disabled = false;
+  createAccountBtn.textContent = 'Create Account';
 }
 
 // ─── Logout ───
@@ -169,6 +172,8 @@ const rescueStatus = document.getElementById('rescue-status');
 const rescueError = document.getElementById('rescue-error');
 const accountDetailsBtn = document.getElementById('account-details-btn');
 const accountDetailsDiv = document.getElementById('account-details');
+const createAccountBtn = document.getElementById('create-account-btn');
+const createAccountResult = document.getElementById('create-account-result');
 
 let schedules = [];
 let rescueActive = false;
@@ -461,6 +466,66 @@ accountDetailsBtn.addEventListener('click', async () => {
   } finally {
     accountDetailsBtn.disabled = false;
     accountDetailsBtn.textContent = 'Load Account Details';
+  }
+});
+
+// ─── Create Account ───
+createAccountBtn.addEventListener('click', async () => {
+  createAccountBtn.disabled = true;
+  createAccountBtn.textContent = 'Creating…';
+  createAccountResult.classList.add('hidden');
+
+  try {
+    const server = new Horizon.Server(HORIZON_URL);
+    const account = await server.loadAccount(walletPublicKey);
+    const baseFee = await server.fetchBaseFee();
+
+    const newPair = Keypair.random();
+    const newPublic = newPair.publicKey();
+    const newSecret = newPair.secret();
+
+    const tx = new TransactionBuilder(account, {
+      fee: (baseFee * 10).toString(),
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(
+        Operation.createAccount({
+          destination: newPublic,
+          startingBalance: '1.0000000',
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(walletKeypair);
+    const result = await server.submitTransaction(tx);
+
+    let html = '<div class="ad-section">';
+    html += `<div class="ad-row" style="color:var(--success);"><span class="ad-label">Status</span><span>Success</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">New Account</span><span class="ad-mono">${newPublic}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Secret Key</span><span class="ad-mono" style="font-size:11px;color:var(--text-muted);">${newSecret}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Funding</span><span class="ad-mono">1.0000000 PI</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">TX Hash</span><span class="ad-mono" style="font-size:11px;">${result.hash}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Type</span><span>create_account (type_i: 0)</span></div>`;
+    html += '</div>';
+    html += '<p style="font-size:12px;color:var(--text-muted);margin-top:8px;text-align:center;">Account creation succeeded! Pi Network allows it.</p>';
+
+    createAccountResult.innerHTML = html;
+    createAccountResult.classList.remove('hidden');
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.response?.data?.title || err.message;
+    let html = '<div class="ad-section">';
+    html += `<div class="ad-row" style="color:var(--danger);"><span class="ad-label">Status</span><span>Failed</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Error</span><span style="font-size:12px;color:var(--danger);">${detail}</span></div>`;
+    html += `<div class="ad-row"><span class="ad-label">Type</span><span>create_account (type_i: 0)</span></div>`;
+    html += '</div>';
+    html += '<p style="font-size:12px;color:var(--text-muted);margin-top:8px;text-align:center;">Account creation blocked on Pi mainnet.</p>';
+
+    createAccountResult.innerHTML = html;
+    createAccountResult.classList.remove('hidden');
+  } finally {
+    createAccountBtn.disabled = false;
+    createAccountBtn.textContent = 'Create Account';
   }
 });
 
